@@ -4,6 +4,3 @@
 
 # pycache
 __pycache__/
-
-# DataBase folder
-/db/
