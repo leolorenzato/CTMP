@@ -1,11 +1,12 @@
 
 '''
-Custom logging library
-
-Created on 20 Feb 2023
-
-@author: AIon Hedge
+Copyright (c) leonardo Lorenzato. All rights reserved.
+Licensed under the MIT License. See LICENSE.txt in the project root for license information.
 '''
+
+#####################################################################################################
+#            Custom logging library                                                                 #
+#####################################################################################################
 
 from colorama import Fore
 

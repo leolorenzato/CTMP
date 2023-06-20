@@ -1,7 +1,7 @@
-'''
-Created on 06 feb 2023
 
-@author: Leonardo Lorenzato
+'''
+Copyright (c) leonardo Lorenzato. All rights reserved.
+Licensed under the MIT License. See LICENSE.txt in the project root for license information.
 '''
 
 #####################################################################################################
