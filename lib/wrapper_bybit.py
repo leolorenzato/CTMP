@@ -1,12 +1,13 @@
 
 '''
-Copyright (c) leonardo Lorenzato. All rights reserved.
+Copyright (c) Leonardo Lorenzato. All rights reserved.
 Licensed under the MIT License. See LICENSE.txt in the project root for license information.
 '''
 
 #####################################################################################################
 #            Import                                                                                 #
 #####################################################################################################
+
 import logging
 import datetime
 import pandas as pd
