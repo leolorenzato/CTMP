@@ -66,6 +66,13 @@ class DatetimeNotSupportedError(Exception):
     pass
 
 
+class StartEndDatetimesError(Exception):
+    '''
+    Raise when start datetime and end datetime are not consistent
+    '''
+    pass
+
+
 class BaseDatetimeFormats:
     '''
     Describes datetime formats, basic implementation
@@ -148,22 +155,36 @@ class DateTimeManager:
     def __init__(self, base_timeframe : BaseTimeframes, datetime_formats : BaseDatetimeFormats):
         self.timeframe = Timeframe(base_timeframe)
         self.date_format = DateFormat(datetime_formats.formats)
+        self.first_available_datetime = None
         self.initial_datetime = None
         self.initial_datetime_id = None
+        self.final_datetime = None
 
     def set_initial_datetime(self, date : datetime) -> None:
         '''
         Set initial datetime for the manager
         '''
-
+        if self.final_datetime and \
+            date and \
+            date > self.final_datetime:
+                raise StartEndDatetimesError
         self.initial_datetime = date 
 
     def set_initial_datetime_id(self, datetime_id : int) -> None:
         '''
         Set initial datetime for the manager
         '''
-
         self.initial_datetime_id = datetime_id 
+
+    def set_final_datetime(self, date : datetime) -> None:
+        '''
+        Set final datetime for the manager
+        '''
+        if date and \
+            self.initial_datetime and \
+            self.initial_datetime > date:
+                raise StartEndDatetimesError
+        self.final_datetime = date
 
     def get_base_delta(self) -> datetime.timedelta:
         '''
@@ -300,7 +321,6 @@ def get_actual_datetime(timeframe : Timeframe) -> datetime.datetime:
     '''
     get actual datetime adjusted for its timeframe
     '''
-
     # Get actual date UTC+0
     act_date = datetime.datetime.now(datetime.timezone.utc)
     return adj_date_from_timeframe(act_date, timeframe)
@@ -352,7 +372,6 @@ def ignore_microseconds(date_datetime : datetime.datetime) -> datetime.datetime:
     '''
     Get the same datetime ignoring microseconds
     '''
-
     return date_datetime.replace(microsecond=0)
 
 
@@ -360,7 +379,6 @@ def ignore_seconds(date_datetime : datetime.datetime) -> datetime.datetime:
     '''
     Get the same datetime ignoring seconds
     '''
-
     return date_datetime.replace(second=0, microsecond=0)
 
 
@@ -368,7 +386,6 @@ def ignore_minutes(date_datetime : datetime.datetime) -> datetime.datetime:
     '''
     Get the same datetime ignoring seconds
     '''
-
     return date_datetime.replace(minute=0, second=0, microsecond=0)
 
 
@@ -376,7 +393,6 @@ def ignore_hours(date_datetime : datetime.datetime) -> datetime.datetime:
     '''
     Get the same datetime ignoring seconds
     '''
-
     return date_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
@@ -423,7 +439,6 @@ def get_diff_units(start_date : datetime.datetime, end_date : datetime.datetime,
     elif timeframe.value in timeframe.supported_timeframes.day:
         # Daily timeframe
         time_delta = delta_days(end_date, start_date)
-
     return time_delta
 
 
@@ -442,7 +457,6 @@ def adj_date_from_timeframe(date : datetime.datetime, timeframe : Timeframe) -> 
     elif timeframe.value in timeframe.supported_timeframes.day:
         # Daily timeframe
         date = ignore_hours(date)
-
     return date
 
 
@@ -471,7 +485,6 @@ def offset_datetime(date : datetime.datetime, num_bars : int, timeframe : Timefr
         elif timeframe.value in timeframe.supported_timeframes.day:
             # Daily timeframe
             sub_date = date + datetime.timedelta(days=abs(num_bars))
-
     return sub_date
 
 
@@ -482,11 +495,9 @@ def build_datetime_endpoints(first_date : datetime.datetime, last_date : datetim
     '''
     # Initialize datetime endpoints list
     date_endpoints_list = []
-
     # Return None when first date is after last date
     if first_date > last_date:
         return date_endpoints_list
-    
     # Calculate how many time units there are from start date to end date
     total_time_units = get_diff_units(first_date, last_date, timeframe) + 1 # +1 is because from 8.00 to 9:00 the difference is 1 
                                                                             # but we need to include both dates, so in total 2 datetimes
@@ -497,14 +508,12 @@ def build_datetime_endpoints(first_date : datetime.datetime, last_date : datetim
         samples_per_query_lst.append(k)
     for _ in range(math.trunc(total_time_units / block_length)):
         samples_per_query_lst.append(block_length)
-
     # Build datetime endpoints
     last_date_temp = last_date
     for num_samples in samples_per_query_lst:
         first_date_temp = offset_datetime(last_date_temp, -(num_samples-1), timeframe)
         date_endpoints_list.append((first_date_temp, last_date_temp))
         last_date_temp = offset_datetime(first_date_temp, -1, timeframe)
-
     return date_endpoints_list
 
 
@@ -514,13 +523,10 @@ def run_datetime_countdown(timeframe : Timeframe) -> None:
     Timeout time given the tiemframe
     Parameter: (str) timeframe: ex: 'm' for minutes, 'h' for hours, ...
     '''
-
     # Get expiration date
     exp_date = get_next_datetime(timeframe)
-
     # Countdown until the last second
     while True:
-    
         # Get actual date UTC+0
         act_date = datetime.datetime.now(datetime.timezone.utc)
         # Round actual time with minute precision
@@ -533,7 +539,6 @@ def run_datetime_countdown(timeframe : Timeframe) -> None:
             print(msg, end='\n')
             break
         time.sleep(0.5)
-    
     # Return when timeout expires
     return
 
@@ -547,10 +552,8 @@ def get_next_datetime(timeframe : Timeframe) -> datetime.datetime:
     SECONDS_PER_MINUTE = 60
     MINUTES_IN_HOUR = 60
     HOURS_IN_DAY = 24
-
     # Get actual date UTC+0
     act_date = datetime.datetime.now(datetime.timezone.utc)
-
     if timeframe.value in timeframe.supported_timeframes.minute:
         # Timeframe: every minutes
         INTERVAL_SECONDS = 1 * SECONDS_PER_MINUTE
@@ -568,7 +571,6 @@ def get_next_datetime(timeframe : Timeframe) -> datetime.datetime:
         exp_date = datetime.datetime(act_date.year, act_date.month, act_date.day, 0, 0) + datetime.timedelta(seconds=INTERVAL_SECONDS)
     else:
         raise TimeframeNotSupportedError('Timeframe ' + "'" + str(timeframe) + "'" + ' not available')
-    
     return exp_date
 
 
@@ -581,16 +583,13 @@ def get_datetime_in_the_middle(start_datetime : datetime.datetime,
         # Round start time and convert it to timestamp
         start_datetime_rounded = adj_date_from_timeframe(start_datetime, timeframe)
         start_timestamp_ms = start_datetime_rounded.timestamp()
-        
         # Round end time and convert it to timestamp
         end_datetime_rounded = adj_date_from_timeframe(end_datetime, timeframe)
         end_timestamp_ms = end_datetime_rounded.timestamp()
-
         # Calculate average datetime
         middle_datetime_timestamp_ms = int((end_timestamp_ms + start_timestamp_ms) / 2)
         middle_datetime = datetime.datetime.fromtimestamp(middle_datetime_timestamp_ms, tz=datetime.timezone.utc)
         middle_datetime_rounded = adj_date_from_timeframe(middle_datetime, timeframe)
-
         return middle_datetime_rounded
 
 
@@ -600,7 +599,6 @@ def is_datetime_has_timeframe(date : datetime.datetime,
     Check if the given datetime is respecting the given timeframe.
     Ex: 2023-12-25 07:30 is not respecting an hourly timeframe, while 2023-12-25 07:00 does
     '''
-
     if adj_date_from_timeframe(date, timeframe) == date:
         return True
     else:
@@ -613,28 +611,23 @@ def get_most_recent_datetime_endpoints(from_date : datetime.datetime,
     '''
     Get datetime endpoints from datetime utility module
     '''
-
     # Get actual date UTC+0
     act_date = datetime.datetime.now(datetime.timezone.utc)
-
     # Check if initiual date exists, otherwise keep 01/01/2015
     if from_date:
         from_date = from_date.replace(tzinfo=datetime.timezone.utc)
     else:
         from_date = datetime.datetime(year=2015, month=1, day=1).replace(tzinfo=datetime.timezone.utc)
-
     # Adjust datetimes depending on the timeframe
     first_date = adj_date_from_timeframe(from_date, timeframe)
     last_date = adj_date_from_timeframe(act_date, timeframe)
     # Do not include current datetime!
     last_date = offset_datetime(last_date, -1, timeframe)
-
     # Build datetime endpoints
     date_endpoints_list = build_datetime_endpoints(first_date=first_date, 
                                                     last_date=last_date, 
                                                     timeframe=timeframe, 
                                                     block_length=num_of_data)
-
     return date_endpoints_list
 
 
@@ -644,7 +637,6 @@ def get_datetime_endpoints_from_date(from_date : datetime.datetime,
     '''
     Get least recent datetime endpoints
     '''
-
     # Set starting datetime timezone
     from_date = from_date.replace(tzinfo=datetime.timezone.utc)
     first_date = adj_date_from_timeframe(from_date, timeframe)
@@ -658,19 +650,30 @@ def get_datetime_endpoints_from_date(from_date : datetime.datetime,
         last_date = act_date_adj
     # Do not include current datetime!
     last_date = offset_datetime(last_date, -1, timeframe)
-
     # Build datetime endpoints
     date_endpoints_list = build_datetime_endpoints(first_date=first_date, 
                                                     last_date=last_date, 
                                                     timeframe=timeframe, 
                                                     block_length=num_of_data)
-
     # Get only least recent endpoints
     if date_endpoints_list:
         return date_endpoints_list[len(date_endpoints_list)-1]
     else:
         return date_endpoints_list
 
+
+def get_date_from_YMD(year : int, month : int, day : int) -> datetime.datetime:
+    '''
+    Get datetime from year, month and day.
+    dates before 1/01/2010 are not permitted
+    '''
+    # None fields are permitted, the function returns a None datetime
+    if not year or not month or not day:
+        return None
+    if year < 2010:
+        raise ValueError
+    dt = datetime.datetime(year=year, month=month, day=day).replace(tzinfo=datetime.timezone.utc)
+    return dt
 
 #####################################################################################################
 #            Build module objects                                                                   #
@@ -688,18 +691,3 @@ DEFAULT_BASE_DATETIME_FORMATS = BaseDatetimeFormats(SUPPORTED_DATETIME_FORMATS)
 #####################################################################################################
 #            Test                                                                                   #
 #####################################################################################################
-
-if __name__ == '__main__':
-
-    # Get timeframe object
-    timeframe_obj = Timeframe(DEFAULT_BASE_TIMEFRAME, DEFAULT_BASE_TIMEFRAME.selected_hour)
-
-    from_date = datetime.datetime(year=2023, month=4, day=25).replace(tzinfo=datetime.timezone.utc)
-
-    print(get_most_recent_datetime_endpoints(from_date, timeframe_obj, 100))
-
-    print(get_datetime_endpoints_from_date(from_date, timeframe_obj, 100))
-
-    print(get_actual_datetime(timeframe_obj))
-
-    print(get_actual_datetime(timeframe_obj).replace(tzinfo=None))

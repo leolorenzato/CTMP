@@ -1,6 +1,0 @@
-{   
-    "asset": "ETH",
-    "asset_ref": "USDT",
-    "ticker_interval": "1m",
-    "asset_type": "spot"
-}

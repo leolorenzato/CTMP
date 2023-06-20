@@ -1,8 +1,8 @@
 {   
     "asset": "BTC",
     "asset_ref": "USDT",
-    "ticker_interval": "1h",
-    "asset_type": "spot",
+    "ticker_interval": "1d",
+    "asset_type": "futureperp",
     "start_date": 
         {
             "day": 1,

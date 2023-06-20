@@ -2,5 +2,17 @@
     "asset": "ETH",
     "asset_ref": "USDT",
     "ticker_interval": "1m",
-    "asset_type": "spot"
+    "asset_type": "spot",
+    "start_date": 
+        {
+            "day": 1,
+            "month": 1,
+            "year": 2020
+        },
+    "end_date": 
+        {
+            "day": 1,
+            "month": 1,
+            "year": 2030
+        }
 }

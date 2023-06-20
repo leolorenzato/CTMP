@@ -9,6 +9,7 @@ Created on 21 dic 2022
 #            Import                                                                                 #
 #####################################################################################################
 import logging
+import datetime
 import pandas as pd
 
 from lib import my_base_objects, my_datetime, table_manager, exchange_lib_manager
@@ -144,7 +145,6 @@ class TickerDownloadManagerSpot(my_base_objects.TickerDownloadManager):
     '''
     # Name for the exchange manager library
     EXCHANGE_MANAGER = None
-
     # Samples to download for each query
     NUM_DATA_IN_QUERY = 200 # Limit for data size
 
@@ -153,6 +153,55 @@ class TickerDownloadManagerSpot(my_base_objects.TickerDownloadManager):
         if not self.EXCHANGE_MANAGER:
             raise AttributeError('Class attribute "EXCHANGE_MANAGER" not set')
         self.last_dowload_status = None
+    
+    def get_first_datetime(self, 
+                            ticker_name : str, 
+                            ticker_reference_name : str,
+                            timeframe : my_datetime.Timeframe) -> datetime.datetime:
+        '''
+        Get first datetime available for the given ticker
+        '''
+        exchange_lib_manager.wait_for_session(self.EXCHANGE_MANAGER)
+        ticker = self.get_symbol(ticker_name, ticker_reference_name)
+        # Information meassge
+        msg = self.EXCHANGE_MANAGER.exchange_name \
+                + ' - ' \
+                + str(ticker) \
+                + ' with timeframe ' + str(timeframe.value) \
+                + ' - ' \
+                + 'Checking first available datetime'
+        logger.info(msg=msg)
+        first_datetime = None
+        try:
+            first_datetime = exchange_lib_manager.get_first_datetime(self.EXCHANGE_MANAGER,
+                                                                        ticker,
+                                                                        timeframe)
+            # Information message
+            msg = self.EXCHANGE_MANAGER.exchange_name + ' - ' + str(ticker) \
+                    + ' with timeframe: ' + str(timeframe.value) + '.' \
+                    + ' First available datetime: ' + str(first_datetime)
+            logger.info(msg=msg)
+        except exchange_lib_manager.ExchangeConnectionError:
+            # Warning meassge
+            msg = self.EXCHANGE_MANAGER.exchange_name + ' - ' + ' Connection error, reuqest timeout'
+            logger.warning(msg=msg)
+        except exchange_lib_manager.GeneralNetworkError:
+            # Warning meassge
+            msg = 'General network error'
+            logger.warning(msg=msg)
+        except exchange_lib_manager.ServerTooBusyError:
+            # Warning meassge
+            msg = 'Server too busy'
+            logger.warning(msg=msg)
+        except exchange_lib_manager.ExchangeResultsNotAvailableError:
+            # Information meassge
+            msg = self.EXCHANGE_MANAGER.exchange_name \
+                    + ' - Downloading ' \
+                    + str(ticker) \
+                    + ' with timeframe ' + str(timeframe.value) + ': ' \
+                    + 'No data available.'
+            logger.info(msg=msg)
+        return first_datetime
         
     def download(self, 
                  df_manager : table_manager.OHLCVDataFrameManager, 
@@ -163,13 +212,21 @@ class TickerDownloadManagerSpot(my_base_objects.TickerDownloadManager):
         '''
         Download data from starting date
         '''
+        # Raise exception if starting date is not valid
+        if not from_date:
+            raise ValueError
+        from_date_selected = from_date
+        # Reset last status if last download has been done correctly or no more data is available
+        if self.last_dowload_status == my_base_objects.RESULTS_STATUS_OK or \
+            self.last_dowload_status == my_base_objects.RESULTS_STATUS_END_OF_DATA:
+            self.last_dowload_status = None
         # Get symbol as a formatted string
         symbol = self.get_symbol(ticker_name, ticker_reference_name)
         # Try to download data, repeat if downloaded data is empty
         MAX_TRIAL_NUM = 100
         trial_counter = 1
         # Wait for API session if there was a network error
-        if self.last_dowload_status == exchange_lib_manager.RESULTS_STATUS_NETWORK_ERROR:
+        if self.last_dowload_status == my_base_objects.RESULTS_STATUS_NETWORK_ERROR:
             exchange_lib_manager.wait_for_session(self.EXCHANGE_MANAGER)
         df = df_manager.get_empty_df()
         while df.empty:
@@ -180,7 +237,7 @@ class TickerDownloadManagerSpot(my_base_objects.TickerDownloadManager):
                         symbol + ' with timeframe ' + str(timeframe.value) + \
                         ' - ' + \
                         'Trying to download data from datetime ' + \
-                        str(from_date) + \
+                        str(from_date_selected) + \
                         '. ' + \
                         'Trial number: ' + \
                         str(trial_counter) + ' of ' + str(MAX_TRIAL_NUM)
@@ -192,28 +249,34 @@ class TickerDownloadManagerSpot(my_base_objects.TickerDownloadManager):
                                                 self.NUM_DATA_IN_QUERY, 
                                                 symbol, 
                                                 timeframe, 
-                                                from_date)
+                                                from_date_selected)
             except exchange_lib_manager.ExchangeConnectionError:
-                self.last_dowload_status = exchange_lib_manager.RESULTS_STATUS_NETWORK_ERROR
+                self.last_dowload_status = my_base_objects.RESULTS_STATUS_NETWORK_ERROR
                 break
             except exchange_lib_manager.GeneralNetworkError:
-                self.last_dowload_status = exchange_lib_manager.RESULTS_STATUS_NETWORK_ERROR
+                self.last_dowload_status = my_base_objects.RESULTS_STATUS_NETWORK_ERROR
                 break
             except exchange_lib_manager.ServerTooBusyError:
-                self.last_dowload_status = exchange_lib_manager.RESULTS_STATUS_NETWORK_ERROR
+                self.last_dowload_status = my_base_objects.RESULTS_STATUS_NETWORK_ERROR
                 break
             except exchange_lib_manager.ExchangeResultsNotAvailableError:
+                self.last_dowload_status = my_base_objects.RESULTS_STATUS_DATA_NOT_AVAILABLE
                 break
-            # Download ok
-            self.last_dowload_status = exchange_lib_manager.RESULTS_STATUS_OK
+            if not df.empty:
+                # Download ok
+                self.last_dowload_status = my_base_objects.RESULTS_STATUS_OK
+                break
             # Try again if DataFrame is empty
-            if df.empty:
-                trial_counter += 1
-                if trial_counter > MAX_TRIAL_NUM:
-                    raise exchange_lib_manager.ExchangeResultsNotAvailableError
-                if from_date:
-                    from_date = my_datetime.offset_datetime(from_date, int(self.NUM_DATA_IN_QUERY/2), timeframe)
-
+            trial_counter += 1
+            if trial_counter > MAX_TRIAL_NUM:
+                raise exchange_lib_manager.ExchangeResultsNotAvailableError
+            from_date_new = my_datetime.offset_datetime(from_date_selected, int(self.NUM_DATA_IN_QUERY/2), timeframe)
+            act_datetime = my_datetime.get_actual_datetime(timeframe)
+            if from_date_new >= act_datetime:
+                # End of data
+                self.last_dowload_status = my_base_objects.RESULTS_STATUS_END_OF_DATA
+                break
+            from_date_selected = from_date_new
         return df
     
     def get_symbol(self, ticker_name : str, 

@@ -32,12 +32,7 @@ logger.handlers.clear()
 logger.addHandler(ch)
 
 # Query length tolerance, in order to always include first datetime and last datetime
-QUERY_LENGTH_TOLERANCE = 2
-
-# Results status
-RESULTS_STATUS_OK = 0
-RESULTS_STATUS_GENERIC_ERROR = 100
-RESULTS_STATUS_NETWORK_ERROR = 101
+_QUERY_LENGTH_TOLERANCE = 2
 
 #####################################################################################################
 #            Classes                                                                                #
@@ -107,7 +102,7 @@ class ExchangeManagerCCXT(my_base_objects.ExchangeManager):
         self.requests_semaphore = threading.Semaphore()
         self.rate_limit_time = 0
 
-    def set_rate_limiter_time(self, time : int) -> None:
+    def set_rate_limiter_time(self, time : float) -> None:
         '''
         Set rate limiter time
         '''
@@ -199,19 +194,15 @@ def get_first_datetime_from_date(exchange_manager : my_base_objects.ExchangeMana
     '''
     Get first available datetime for the given exchange, ticker and timeframe
     '''    
-
     QUERY_LENGTH = 100
-    
     # Round starting datetime
     start_datetime_rounded = my_datetime.adj_date_from_timeframe(from_date, timeframe)
-
     # Build datetime endpoints
     date_endpoints_list = my_datetime.get_most_recent_datetime_endpoints(from_date=start_datetime_rounded, 
                                                                 timeframe=timeframe, 
-                                                                num_of_data=QUERY_LENGTH-QUERY_LENGTH_TOLERANCE)
+                                                                num_of_data=QUERY_LENGTH-_QUERY_LENGTH_TOLERANCE)
     # Reverse in order to start from oldest datetime
     date_endpoints_list.reverse()
-
     if date_endpoints_list:
         for first_date, _ in date_endpoints_list:
             msg = exchange_manager.exchange_name + ' - ' + \
@@ -225,7 +216,6 @@ def get_first_datetime_from_date(exchange_manager : my_base_objects.ExchangeMana
             if len(candles) > 0:
                 first_available_date = datetime.datetime.fromtimestamp(int(candles[0][0] / 1000), tz=datetime.timezone.utc)
                 return first_available_date
-
     return None
 
 
@@ -301,7 +291,6 @@ def download_df_from_date(exchange_manager : my_base_objects.ExchangeManager,
             + ' to date ' + str(df[df_mngr.column_labels.date.label_name][len(df)-1]) \
             + '. ' + 'Data length: ' + str(len(df))
     logger.info(msg=msg)
-
     return df
 
 
@@ -311,53 +300,15 @@ def download_chunk_df(exchange_manager : my_base_objects.ExchangeManager,
                     ticker : str, 
                     timeframe : my_datetime.Timeframe, 
                     from_date : datetime = None) -> pd.DataFrame:
-
     '''
     Download chunk of data and return a DataFrame with those data
     '''
     # Create empty manager
     df = df_mngr.get_empty_df()
-    # Set first date if given by input parameters or search first date by quering the API
-    if from_date:
-        first_useful_datetime = from_date
-    else:
-        try:
-            first_useful_datetime = get_first_datetime(exchange_manager,
-                                                        ticker,
-                                                        timeframe)
-        except ExchangeConnectionError:
-            # Warning meassge
-            msg = exchange_manager.exchange_name + ' - ' + ' Connection error, reuqest timeout'
-            logger.warning(msg=msg)
-            raise
-        except GeneralNetworkError:
-            # Warning meassge
-            msg = 'General network error'
-            logger.warning(msg=msg)
-            raise
-        except ServerTooBusyError:
-            # Warning meassge
-            msg = 'Server too busy'
-            logger.warning(msg=msg)
-            raise
-        except ExchangeResultsNotAvailableError:
-            # Information meassge
-            msg = exchange_manager.exchange_name \
-                    + ' - Downloading ' \
-                    + str(ticker) \
-                    + ' with timeframe ' + str(timeframe.value) + ': ' \
-                    + 'No data available.'
-            logger.info(msg=msg)
-            raise
-        # Information message
-        msg = exchange_manager.exchange_name + ' - ' + str(ticker) \
-                + ' with timeframe: ' + str(timeframe.value) + '.' \
-                + ' First available datetime: ' + str(first_useful_datetime)
-        logger.info(msg=msg)
     # Build datetime endpoints
-    date_endpoints = my_datetime.get_datetime_endpoints_from_date(from_date=first_useful_datetime, 
+    date_endpoints = my_datetime.get_datetime_endpoints_from_date(from_date=from_date, 
                                                                     timeframe=timeframe, 
-                                                                    num_of_data=limit_per_query-QUERY_LENGTH_TOLERANCE)
+                                                                    num_of_data=limit_per_query-_QUERY_LENGTH_TOLERANCE)
     # Check if datetime endpoints are valid
     if not date_endpoints:
         # Data not available
@@ -365,16 +316,15 @@ def download_chunk_df(exchange_manager : my_base_objects.ExchangeManager,
             ' - ' + str(ticker) + \
             ' with timeframe ' + str(timeframe.value) + ': ' \
             + 'No data available from ' \
-            + str(first_useful_datetime) + '.'
+            + str(from_date) + '.'
         logger.info(msg)
-        raise ExchangeResultsNotAvailableError
-    
+        return df
     try:
         # Offset first date in order to be sure to include it
         from_date_temp = my_datetime.offset_datetime(date_endpoints[0], -1, timeframe) 
         # Calculate amount of samples to download with each query
         datetime_delta = my_datetime.get_diff_units(date_endpoints[0], date_endpoints[1], timeframe)
-        query_data_length = datetime_delta + 1 + QUERY_LENGTH_TOLERANCE # +1 is to include both endpoints theorically,
+        query_data_length = datetime_delta + 1 + _QUERY_LENGTH_TOLERANCE # +1 is to include both endpoints theorically,
                                                                         # + QUERY_LENGTH_TOLERANCE is to be sure thta actually data is in the correct time range
         downloaded_df = download_df_from_date(exchange_manager=exchange_manager,
                                                 df_mngr=df_mngr,
@@ -410,5 +360,4 @@ def download_chunk_df(exchange_manager : my_base_objects.ExchangeManager,
     downloaded_df = df_mngr.bound_df(downloaded_df, date_endpoints[0], date_endpoints[1])
     # Concatenate new dataframe with previous one
     df = pd.concat([downloaded_df, df], ignore_index=True)
-
     return df

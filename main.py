@@ -145,12 +145,32 @@ if __name__ == '__main__':
                 logger.info('Supported coin pairs are: ' + \
                             str(ticker_manager.get_supported_coin_pairs(exchange_name, ticker_dict[ticker_labels.asset_type])))
                 continue
+            # Check start date
+            try:
+                my_datetime.get_date_from_YMD(ticker_dict[ticker_labels.start_date][ticker_labels.year], 
+                                                ticker_dict[ticker_labels.start_date][ticker_labels.month], 
+                                                ticker_dict[ticker_labels.start_date][ticker_labels.day])
+            except ValueError:
+                logger.info(ticker_path + ': ' + 'Coin pair ' + \
+                            '"' + ticker_dict[ticker_labels.coin_name] + '/' + ticker_dict[ticker_labels.coin_ref_name] + '"' + \
+                                 ' has start date not supported')
+                continue
+            # Check end date
+            try:
+                my_datetime.get_date_from_YMD(ticker_dict[ticker_labels.end_date][ticker_labels.year], 
+                                                ticker_dict[ticker_labels.end_date][ticker_labels.month], 
+                                                ticker_dict[ticker_labels.end_date][ticker_labels.day])
+            except ValueError:
+                logger.info(ticker_path + ': ' + 'Coin pair ' + \
+                            '"' + ticker_dict[ticker_labels.coin_name] + '/' + ticker_dict[ticker_labels.coin_ref_name] + '"' + \
+                                 ' has end date not supported')
+                continue
             # Ticker check OK, insert in the download list
             tickers_params_list_checked.append(ticker_dict)
         
         # Create tuple with exchange name and the list of tickers to download
         data_source_params_list_checked.append((exchange_name, tickers_params_list_checked))
-    
+
     ###################################################
     #    Load parameters data in a ticker object      #
     ###################################################
@@ -174,8 +194,23 @@ if __name__ == '__main__':
                                                         datetime_manager=ticker_manager.get_datetime_manager(ticker_dict[ticker_labels.ticker_interval], 
                                                                                                                 my_datetime.DEFAULT_DATETIME_FORMAT),
                                                         df_manager=ticker_manager.get_default_df_manager())
-            logger.info('Downloading ' + \
-                        ticker_obj.get_ticker_verbose_description())
+            # Set initial and final datetimes
+            try:
+                ticker_obj.datetime_manager.set_initial_datetime(my_datetime.get_date_from_YMD(ticker_dict[ticker_labels.start_date][ticker_labels.year], 
+                                                                                                ticker_dict[ticker_labels.start_date][ticker_labels.month], 
+                                                                                                ticker_dict[ticker_labels.start_date][ticker_labels.day]))
+                ticker_obj.datetime_manager.set_final_datetime(my_datetime.get_date_from_YMD(ticker_dict[ticker_labels.end_date][ticker_labels.year], 
+                                                                                            ticker_dict[ticker_labels.end_date][ticker_labels.month], 
+                                                                                            ticker_dict[ticker_labels.end_date][ticker_labels.day]))
+            except my_datetime.StartEndDatetimesError:
+                logger.info(ticker_obj.get_ticker_verbose_description() + \
+                            ' - ' + \
+                            'Initial and final datetimes are not consistent. Initial datetime is greater than the final datetime')
+                continue
+            # Ticker valid!
+            logger.info(ticker_obj.get_ticker_verbose_description() + \
+                        ' - ' + \
+                        'Downloading ticker data')
             ticker_obj_list.append(ticker_obj)
 
     ###################################################

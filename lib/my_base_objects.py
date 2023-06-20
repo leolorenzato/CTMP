@@ -12,6 +12,7 @@ Created on 19 dic 2022
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import pandas as pd
+import datetime
 
 # Coin label (i.e BTC in BTC/USDT)
 COIN_LABEL = 'asset'
@@ -21,6 +22,18 @@ COIN_REF_LABEL = 'asset_ref'
 TICKER_INTERVAL_LABEL = 'ticker_interval'
 # Market type label
 ASSET_TYPE_LABEL = 'asset_type'
+# Date labels
+START_DATE_LABEL = 'start_date'
+END_DATE_LABEL = 'end_date'
+YEAR_LABEL = 'year'
+MONTH_LABEL = 'month'
+DAY_LABEL = 'day'
+# Exchange results status
+RESULTS_STATUS_OK = 0
+RESULTS_STATUS_DATA_NOT_AVAILABLE = 10
+RESULTS_STATUS_END_OF_DATA = 11
+RESULTS_STATUS_GENERIC_ERROR = 100
+RESULTS_STATUS_NETWORK_ERROR = 101
 
 #####################################################################################################
 #            Classes                                                                                #
@@ -70,6 +83,11 @@ class TickerParamLabels:
     coin_ref_name : str = COIN_REF_LABEL
     ticker_interval : str = TICKER_INTERVAL_LABEL
     asset_type : str = ASSET_TYPE_LABEL
+    start_date : str = START_DATE_LABEL
+    end_date : str = END_DATE_LABEL
+    year : str = YEAR_LABEL
+    month : str = MONTH_LABEL
+    day : str = DAY_LABEL
 
 
 @dataclass
@@ -211,6 +229,13 @@ class TickerDownloadManager(ABC):
     def get_symbol(self) -> str:
         '''
         Get symbol expressed as a string
+        '''
+        ...
+
+    @abstractmethod
+    def get_first_datetime(self) -> datetime.datetime:
+        '''
+        Get first available datetime for the ticker
         '''
         ...
 

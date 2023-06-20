@@ -21,6 +21,13 @@ import datetime
 #            Classes                                                                                #
 #####################################################################################################
 
+class TableDatetimeNotAllowed(Exception):
+    '''
+    First datetime in the table is not valid
+    '''
+    pass
+
+
 @dataclass
 class Label:
     '''
@@ -122,12 +129,10 @@ class OHLCVDataFrameManager:
                 return empty_df
         else:
             last_index = len(df)-1
-
         # Slice DataFrame
         sliced_df = df.iloc[first_index:(last_index+1)]
         # Reset index
         sliced_df.reset_index(drop=True, inplace=True)
-
         return sliced_df
 
     def cast_datetime_from_timestamp(self, df : pd.DataFrame) -> pd.DataFrame:
@@ -135,14 +140,12 @@ class OHLCVDataFrameManager:
         Cast datetime column from timestamp to datetime.datetime and return the resulting DataFrame
         '''
         df[self.column_labels.date.label_name] = pd.to_datetime(df[self.column_labels.date.label_name], utc=True, unit='ms')
-
         return df
     
     def to_df(self, candles : list[list]) -> pd.DataFrame:
         '''
         Convert ohlcv candles into Pandas.DataFrame
         '''
-
         return pd.DataFrame(data=candles, columns = [self.column_labels.date.label_name,
                                                      self.column_labels.price_open.label_name,
                                                      self.column_labels.price_high.label_name,
@@ -156,20 +159,37 @@ class OHLCVDataFrameManager:
         '''
         if len(df) > self.max_df_size:
             df = df.iloc[:self.max_df_size]
-        
         return df
     
     def slice_df_from_datetime(self, df : pd.DataFrame, from_datetime : datetime.datetime) -> pd.DataFrame:
         '''
         Get slice of DataFrame starting from given datetime
         '''
+        if df.empty:
+            return df
         if from_datetime is None:
             return df
         match_datetime_list = df.index[df[self.column_labels.date.label_name] >= from_datetime].tolist()
         if not match_datetime_list:
-            raise RuntimeError
+            return df.iloc[:0]
         # Return a dataframe starting from the selected datetime
         sliced_df = df.iloc[match_datetime_list[0]:]
+        sliced_df.reset_index(drop=True, inplace=True)
+        return sliced_df
+    
+    def slice_df_to_datetime(self, df : pd.DataFrame, to_datetime : datetime.datetime) -> pd.DataFrame:
+        '''
+        Get slice of DataFrame up to a given datetime
+        '''
+        if df.empty:
+            return df
+        if to_datetime is None:
+            return df
+        match_datetime_list = df.index[df[self.column_labels.date.label_name] <= to_datetime].tolist()
+        if not match_datetime_list:
+            return df.iloc[:0]
+        # Return a dataframe starting from the selected datetime
+        sliced_df = df.iloc[:match_datetime_list[-1]+1]
         sliced_df.reset_index(drop=True, inplace=True)
         return sliced_df
     
@@ -179,14 +199,12 @@ class OHLCVDataFrameManager:
         '''
         id_list = [i for i in range(len(df))]
         df[self.column_labels.id.label_name] = id_list
-
         return df
 
-    def _offset_df_ids(self, df : pd.DataFrame, starting_id : int) -> pd.DataFrame:
+    def offset_df_ids(self, df : pd.DataFrame, starting_id : int) -> pd.DataFrame:
         '''
         Offset ids with starting_id as offset
         '''
         if starting_id:
             df[self.column_labels.id.label_name] = df[self.column_labels.id.label_name].astype(int) + starting_id
-
         return df

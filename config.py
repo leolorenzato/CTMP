@@ -31,10 +31,10 @@ os.system('cls' if os.name == 'nt' else 'clear')
 platform = platform
 
 # Set version revision
-version_date = '2023-06-12'
+version_date = '2023-06-20'
 version_name = 'CryptoTickersMarketPrice'
 program_major_version = '1'
-program_minor_version = '0'
+program_minor_version = '1'
 
 # Get program path
 program_path = os.getcwd()

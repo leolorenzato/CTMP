@@ -60,7 +60,6 @@ class TickerManager:
     '''
     Describes an ticker data object, which contains tickers information and data on a DataFrame
     '''
-
     ticker_name : my_base_objects.SupportedCoin
     ticker_reference : my_base_objects.SupportedCoin
     asset_type : my_base_objects.SupportedAssetType
@@ -78,6 +77,24 @@ class TickerManager:
         '''
         # Build empty DataFrame
         self.df = self.df_manager.get_empty_df()
+        # Set initial datetime
+        if not self.datetime_manager.first_available_datetime:
+            first_available_datetime = self.download_manager.get_first_datetime(self.ticker_name.name, 
+                                                        self.ticker_reference.name,
+                                                        self.datetime_manager.timeframe)
+            # When first datetime is None it could be due to a connection error
+            if not first_available_datetime:
+                return
+            self.datetime_manager.first_available_datetime = first_available_datetime
+        # Set initial datetime equal to first available datetime when initial datetime 
+        # is lesser than first available datetime
+        if not self.datetime_manager.initial_datetime or \
+            self.datetime_manager.initial_datetime < self.datetime_manager.first_available_datetime:
+            self.datetime_manager.initial_datetime = self.datetime_manager.first_available_datetime
+        # Return when final datetime is lesser than first available datetime
+        if self.datetime_manager.final_datetime and \
+            self.datetime_manager.final_datetime < self.datetime_manager.first_available_datetime:
+            return 
         # Download 
         df = self.download_manager.download(df_manager=self.df_manager, 
                                         ticker_name=self.ticker_name.name, 
@@ -88,27 +105,27 @@ class TickerManager:
         df = self.df_manager.resize_df(df)
         # Reset indexes and drop index column
         df.reset_index(drop=True, inplace=True)
-
         # Return if DataFrame is empty
         if df.empty:    # This is to avoid KeyError when accessing a non existing column in the dataframe
             return
-        
+        # Keep dataFrame only if its last date is greater or equal to the requested start datetime
         if self.datetime_manager.initial_datetime:
             if df[self.df_manager.column_labels.date.label_name].iloc[-1] < self.datetime_manager.initial_datetime:
                 return
-            
         # Set ids as None
         df[self.df_manager.column_labels.id.label_name] = [None for i in range(len(df))]
         # Save new data in the object dataframe
         self.df = df[self.df.columns.values.tolist()]
         # Slice dataframe in order to have the starting date to be equal to the datetime manager's initial datetime
         self.df = self.df_manager.slice_df_from_datetime(self.df, self.datetime_manager.initial_datetime)
+        # Slice dataframe in order to have the final date to be lesser or equal to the datetime manager's final datetime
+        self.df = self.df_manager.slice_df_to_datetime(self.df, self.datetime_manager.final_datetime)
         # Reset index and drop index column of the dataframe after slicing
         self.df.reset_index(drop=True, inplace=True)
         # Assign ids
         self.df = self.df_manager.assign_df_ids(self.df)
         # Rearrange ids
-        self.df = self.df_manager._offset_df_ids(self.df, self.datetime_manager.initial_datetime_id)
+        self.df = self.df_manager.offset_df_ids(self.df, self.datetime_manager.initial_datetime_id)
 
     def is_datetime_consecutive(self) -> bool:
         '''
@@ -239,7 +256,6 @@ class TickerDBManager:
                 os.mkdir(ticker_dir_path)
             except FileExistsError:
                 pass
-
         return
 
     def create_db_table(self, cursor : sqlite3.Cursor, ticker : TickerManager) -> None:
@@ -255,7 +271,6 @@ class TickerDBManager:
             my_db.create_table(cursor=cursor, 
                                 table_name=ticker_desc, 
                                 col_name_list=col_name_list)
-        
         return
     
     def _get_db_exchange_dir_name(self, ticker : TickerManager) -> str:
@@ -301,18 +316,15 @@ class TickerDBManager:
                                             table_name=ticker_desc):
             # Table not existing
             return None
-        
         if not my_db.get_last_row(cursor=cursor, 
                                          table_name=ticker_desc):
             # Table existing but empty
             # Set last date to None
             return None
-        
         # Table already existing
         last_date = dateutil.parser.parse(my_db.get_last_row_value(cursor=cursor, 
                                                                     table_name=ticker_desc, 
                                                                     column_name=ticker.df_manager.column_labels.date.label_name)[0])
-
         return last_date.replace(tzinfo=timezone.utc)
     
     def get_db_last_id(self, cursor : sqlite3.Cursor, ticker : TickerManager) -> int:
@@ -321,21 +333,17 @@ class TickerDBManager:
         '''
         # Get ticker description
         ticker_desc = ticker.get_ticker_description()
-
         if not my_db.is_table_existing(cursor=cursor, 
                                             table_name=ticker_desc):
             # Table not existing
             return None
-        
         if not my_db.get_last_row(cursor=cursor, 
                                          table_name=ticker_desc):
             # Table existing but empty
             return None
-        
         last_id = my_db.get_last_row_value(cursor=cursor, 
                                             table_name=ticker_desc, 
                                             column_name=ticker.df_manager.column_labels.id.label_name)[0]
-
         return int(last_id)
     
     def write_to_db(self, cursor : sqlite3.Cursor, ticker : TickerManager) -> None:
@@ -346,18 +354,17 @@ class TickerDBManager:
         if my_db.is_table_existing(cursor=cursor, table_name=table_name):
             columns_name = my_db.get_columns_name(cursor=cursor, table_name=table_name)
             df = ticker.df[columns_name]
-            if not df.empty:
-                timeout_counter = 0
-                while timeout_counter < 10:
-                    try:
-                        df.to_sql(name=table_name, con=cursor.connection, index=False, if_exists='append')
-                        break
-                    except sqlite3.OperationalError:
-                        time.sleep(1)
-                        timeout_counter += 1
+            try:
+                my_db.write_dataframe_to_DB(cursor=cursor,
+                                            df=df,
+                                            table_name=table_name)
                 msg = ticker.get_ticker_verbose_description() + ' - ' + 'Data Frame written successfully to database'
                 logger.info(msg=msg)
-
+            except my_db.AccessDBMaxTrialExceedError:
+                pass
+            except my_db.WriteDBEmptyDataError:
+                pass
+            
 
 class TickerAutoUpdater:
 
@@ -373,7 +380,6 @@ class TickerAutoUpdater:
         exp_date = my_datetime.get_next_datetime(ticker.datetime_manager.timeframe)
         msg = ticker.get_ticker_verbose_description() + ' - ' + 'New data at [hh/mm/ss]: ' + str(exp_date.replace(tzinfo=timezone.utc))
         logger.info(msg=msg)
-
         # Countdown until the last second
         while True:
         
@@ -389,7 +395,6 @@ class TickerAutoUpdater:
                 logger.debug(msg=msg)
                 break
             time.sleep(0.5)
-        
         # Return when timeout expires
         return
     
@@ -402,44 +407,72 @@ class TickerAutoUpdater:
         # Connect to database
         cursor = ticker_db_manager.connect_db(ticker)
         ticker_db_manager.create_db_table(cursor, ticker)
-
+        act_datetime = my_datetime.get_actual_datetime(ticker.datetime_manager.timeframe)
+        if ticker.datetime_manager.initial_datetime and \
+            ticker.datetime_manager.initial_datetime >= act_datetime:
+            msg = ticker.get_ticker_verbose_description() + \
+                        ' - ' + \
+                        'Data from ' + \
+                        str(ticker.datetime_manager.initial_datetime) + \
+                        ' not yet available'
+            logger.info(msg=msg)
+            return
         # Start update loop
         while True:
-            
+            if ticker.datetime_manager.final_datetime and \
+                ticker.datetime_manager.first_available_datetime and \
+                ticker.datetime_manager.final_datetime < ticker.datetime_manager.first_available_datetime:
+                msg = ticker.get_ticker_verbose_description() + \
+                        ' - ' + \
+                        'Final date is before first available datetime of ' + \
+                        str(ticker.datetime_manager.first_available_datetime)
+                logger.info(msg=msg)
+                break
             # Get last database datetime and id
             last_date = ticker_db_manager.get_db_last_date(cursor, ticker)
+            # Exit if the last date in the database is greater than the last date requested
+            if last_date and \
+                ticker.datetime_manager.final_datetime and \
+                last_date >= ticker.datetime_manager.final_datetime:
+                msg = ticker.get_ticker_verbose_description() + \
+                        ' - ' + \
+                        'Data up to ' + \
+                        str(ticker.datetime_manager.final_datetime) + \
+                        ' already written in the database'
+                logger.info(msg=msg)
+                break
             # If last date is not None download only remaining dates
             if last_date:
                 # Set initial datetime
                 base_delta_datetime = ticker.datetime_manager.get_base_delta()
                 # Adding base delta datetime is just to start from the next available date
                 ticker.datetime_manager.set_initial_datetime(last_date + base_delta_datetime)
-            else:
-                ticker.datetime_manager.set_initial_datetime(None)
             # Get last database id
             last_id = ticker_db_manager.get_db_last_id(cursor, ticker)
-            if last_id:
+            if last_id is not None:
                 # Set initial datetime id
                 # Adding 1 is just to start from the next available id
                 ticker.datetime_manager.set_initial_datetime_id(last_id + 1)
-
             # Download ticker data
             ticker.download()
-
-            # Test ticker consistency
-            if not ticker.has_data():
+            if verbose:
                 msg = ticker.get_ticker_verbose_description() + \
                         ' - ' + \
-                        'Ticker data is empty.'
-                logger.warning(msg=msg)
-            if ticker.has_data() and not ticker.is_init_datetime_match():
-                if ticker.has_init_datetime_gap():
+                        "Download status code: " + \
+                        str(ticker.download_manager.last_dowload_status)
+                logger.info(msg=msg)
+            # Get actual datetime
+            act_datetime = my_datetime.get_actual_datetime(ticker.datetime_manager.timeframe)
+            if ticker.has_data():
+                if ticker.is_init_datetime_match():
+                    pass
+                elif ticker.has_init_datetime_gap():
                     msg = ticker.get_ticker_verbose_description() + \
                             ' - ' + \
                             "First detected datetime in ticker's data doesn't match the first requested datetime. " + \
                             "This results in data gap in the database"
                     logger.warning(msg=msg)
-                if ticker.has_init_datetime_overlap():
+                elif ticker.has_init_datetime_overlap():
                     msg = ticker.get_ticker_verbose_description() + \
                             ' - ' + \
                             "First detected datetime in ticker's data doesn't match the first requested datetime. " + \
@@ -447,28 +480,37 @@ class TickerAutoUpdater:
                             "Exit process in order to avoid data overwrite!"
                     logger.error(msg=msg)
                     break
-            if ticker.has_data() and not ticker.is_datetime_consecutive():
-                msg = ticker.get_ticker_verbose_description() + \
-                        ' - ' + \
-                        'Two or more non-consecutive datetimes have been detected. ' + \
-                        "This results in data gap in the database"
-                if verbose:
-                    msg += ': ' + \
-                            str([str(datetime) for datetime in ticker.get_non_consecutive_datetimes()])
-                logger.warning(msg=msg)
-
-            if ticker.has_data():
+                if not ticker.is_datetime_consecutive():
+                    msg = ticker.get_ticker_verbose_description() + \
+                            ' - ' + \
+                            'Found two or more non-consecutive datetimes. ' + \
+                            "This results in data gap in the database"
+                    if verbose:
+                        msg += ': ' + \
+                                str([str(datetime) for datetime in ticker.get_non_consecutive_datetimes()])
+                    logger.warning(msg=msg)
                 # Write data in the database
                 if True:
                     ticker_db_manager.write_to_db(cursor, ticker)
-
+            else:
+                msg = ticker.get_ticker_verbose_description() + \
+                        ' - ' + \
+                        'Ticker data is empty.'
+                logger.warning(msg=msg)
+                if ticker.download_manager.last_dowload_status == my_base_objects.RESULTS_STATUS_OK or \
+                    (ticker.download_manager.last_dowload_status == my_base_objects.RESULTS_STATUS_END_OF_DATA and \
+                    ticker.datetime_manager.final_datetime and \
+                    ticker.datetime_manager.final_datetime <= act_datetime):
+                    break
             # Get last database datetime and id
             last_date = ticker_db_manager.get_db_last_date(cursor, ticker)
-            # If last date is not None download only remaining dates
-            if not last_date:
+            if not last_date or \
+                ticker.datetime_manager.final_datetime and \
+                last_date >= ticker.datetime_manager.final_datetime:
                 continue
-            act_datetime = my_datetime.get_actual_datetime(ticker.datetime_manager.timeframe)
-            if last_date >= (act_datetime - ticker.datetime_manager.get_base_delta()):
+            # Wait for timeframe to expire before downloading new data
+            if last_date >= (act_datetime - ticker.datetime_manager.get_base_delta()) or \
+                ticker.download_manager.last_dowload_status == my_base_objects.RESULTS_STATUS_END_OF_DATA:
                 # Wait until next datetime
                 self.datetime_countdown(ticker)
 
@@ -533,7 +575,6 @@ def get_exchange_utility_module(exchange_name : str) -> ModuleType:
     # Raise error if exchange is not supported
     if not is_exchange_supported(exchange_name):
         raise my_base_objects.ExchangeNotSupportedError('Exchange ' + str(exchange_name) + ' not supported!')
-
     return EXCHANGE_UTILITY_MODULES[exchange_name]
 
 
@@ -558,7 +599,6 @@ def get_coin_pair(exchange_name : str, pair : tuple[str], asset_type : str) -> m
     coin_pair = get_exchange_utility_module(exchange_name).SupportedCoinPair()
     coin_pair.asset_type = asset_type
     coin_pair.pair = pair
-
     return coin_pair
 
 
@@ -568,7 +608,6 @@ def get_asset_type(exchange_name : str, asset_type : str) -> my_base_objects.Sup
     '''
     asset_type_obj = get_exchange_utility_module(exchange_name).SupportedAssetType()
     asset_type_obj.type = asset_type
-
     return asset_type_obj
 
 
@@ -583,7 +622,6 @@ def get_datetime_manager(timeframe : str, datetime_format : str) -> my_datetime.
     datetime_manager.timeframe.value = timeframe
     # Set date format
     datetime_manager.date_format.value = datetime_format
-
     return datetime_manager
 
 
@@ -593,7 +631,6 @@ def get_ticker_download_manager(exchange_name : str, asset_type : str) -> my_bas
     '''
     if not is_exchange_supported(exchange_name):
         raise my_base_objects.ExchangeNotSupportedError('Exchange ' + str(exchange_name) + ' not supported!')
-
     return TICKER_MANAGERS[exchange_name][asset_type]()
 
 
