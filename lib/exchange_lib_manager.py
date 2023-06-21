@@ -16,7 +16,7 @@ import time
 import logging
 import threading
 import ccxt
-from ccxt.base.errors import RequestTimeout, NetworkError, RateLimitExceeded
+from ccxt.base.errors import RequestTimeout, NetworkError, RateLimitExceeded, ExchangeError
 import pandas as pd
 import datetime
 
@@ -152,7 +152,7 @@ class ExchangeManagerCCXT(my_base_objects.ExchangeManager):
         try:
             self.rate_limiter()
             return self.exchange.fetch_ohlcv(symbol=symbol, timeframe=timeframe, since=from_date_timestamp_ms, limit=limit)
-        except RequestTimeout:
+        except (RequestTimeout, ExchangeError):
             raise ExchangeConnectionError
         except NetworkError:
             raise GeneralNetworkError
