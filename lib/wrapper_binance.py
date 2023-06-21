@@ -191,7 +191,9 @@ class TickerDownloadManagerSpot(my_base_objects.TickerDownloadManager):
             logger.info(msg=msg)
         except exchange_lib_manager.ExchangeConnectionError:
             # Warning meassge
-            msg = self.EXCHANGE_MANAGER.exchange_name + ' - ' + ' Connection error, reuqest timeout'
+            msg = self.EXCHANGE_MANAGER.exchange_name + \
+                    ' - ' + \
+                    ' Connection error, request timeout or server error'
             logger.warning(msg=msg)
         except exchange_lib_manager.GeneralNetworkError:
             # Warning meassge
