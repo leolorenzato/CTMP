@@ -12,13 +12,9 @@ Licensed under the MIT License. See LICENSE.txt in the project root for license 
 #            Import section                                                                         #
 #####################################################################################################
 
-# Sys
 import sys
-
-import os
-
-# platform
 from sys import platform
+import os
 
 #####################################################################################################
 #            Core                                                                                   #
@@ -32,7 +28,7 @@ platform = platform
 
 # Set version revision
 version_date = '2023-06-20'
-version_name = 'CryptoTickersMarketPrice'
+version_name = 'CTMP - Crypto Tickers Market Price'
 program_major_version = '1'
 program_minor_version = '1'
 
