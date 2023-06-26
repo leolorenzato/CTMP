@@ -62,11 +62,11 @@ if __name__ == '__main__':
         for ticker_dict in ticker_dict_list:
             ticker_str_formatted = exchange_name + \
                                     '_' + \
+                                    ticker_dict[ticker_labels.asset_type] + \
+                                    '_' + \
                                     ticker_dict[ticker_labels.coin_name] + \
                                     '_' + \
                                     ticker_dict[ticker_labels.coin_ref_name] + \
-                                    '_' + \
-                                    ticker_dict[ticker_labels.asset_type] + \
                                     '_' + \
                                     ticker_dict[ticker_labels.ticker_interval]
             # Download only requested tickers
