@@ -54,6 +54,22 @@ In the project folder run on your terminal:
 pip install -r requirements.txt
 ```
 to install dependecies.\
+Edit the main.json file located inside the folder 
+ ```
+ /params
+ ```
+An example of the main.json file could be the following:
+```json
+{
+    "tickers": 
+    [
+        "Binance_BTC_USDT_spot_1h",
+        "ByBit_ETH_USDT_futureperp_1h",
+        "Bitfinex_BTC_USDT_spot_1m",
+        "ByBit_ETH_USDT_spot_1d"
+    ]
+}
+```
 Then just run the main file:
 ```shell
 python3 main.py
@@ -66,7 +82,12 @@ Results will be saved inside directories located at:
  ```
  /params/exchanges
  ```
- Notation for market types:
+
+ ## Logs
+
+All logs are showed in the terminal.
+
+Market types in logs follow this notation:
 * spot: AAA/BBB (ex. BTC/USDT)
 * future perpetuals: AAA/BBB:BBB (ex. BTC/USDT:USDT)
 
