@@ -63,10 +63,10 @@ An example of the main.json file could be the following:
 {
     "tickers": 
     [
-        "Binance_BTC_USDT_spot_1h",
-        "ByBit_ETH_USDT_futureperp_1h",
-        "Bitfinex_BTC_USDT_spot_1m",
-        "ByBit_ETH_USDT_spot_1d"
+        "Binance_spot_BTC_USDT_1h",
+        "ByBit_futureperp_ETH_USDT_1h",
+        "Bitfinex_spot_BTC_USDT_1m",
+        "ByBit_spot_ETH_USDT_1d"
     ]
 }
 ```
