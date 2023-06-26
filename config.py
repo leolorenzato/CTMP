@@ -27,10 +27,10 @@ os.system('cls' if os.name == 'nt' else 'clear')
 platform = platform
 
 # Set version revision
-version_date = '2023-06-20'
+version_date = '2023-06-26'
 version_name = 'CTMP - Crypto Tickers Market Price'
 program_major_version = '1'
-program_minor_version = '1'
+program_minor_version = '2'
 
 # Get program path
 program_path = os.getcwd()
