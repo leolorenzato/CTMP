@@ -115,7 +115,7 @@ def parse_tickers_params_files(tickers_params : list[tuple[dict[str], list[dict[
     '''
     exchange_labels = my_base_objects.ExchangeParamLabels()
     ticker_labels = my_base_objects.TickerParamLabels()
-    tickers_params_list_checked = []
+    params_list_checked = []
     for exchange_dict, ticker_dict_list, ticker_path_list in tickers_params:
         if not exchange_dict[exchange_labels.enable]:
             continue
@@ -196,5 +196,5 @@ def parse_tickers_params_files(tickers_params : list[tuple[dict[str], list[dict[
             tickers_params_list_checked.append(ticker_dict)
         
         # Create tuple with exchange name and the list of tickers to download
-        tickers_params_list_checked.append((exchange_name, tickers_params_list_checked))
-    return tickers_params_list_checked
+        params_list_checked.append((exchange_name, tickers_params_list_checked))
+    return params_list_checked
